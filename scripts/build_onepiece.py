@@ -53,6 +53,20 @@ def cn_rows():
         time.sleep(DELAY)
 
 
+def pick_cn_images(rows):
+    """number -> official CN scan URL, preferring the base art (no _NN suffix)."""
+    imgs = {}
+    for r in rows:
+        num = r["cardNumber"].strip()
+        url = (r.get("cardImg") or "").strip()
+        if not num or num.endswith("P") or not url:
+            continue
+        base = url.rsplit("/", 1)[-1].split(".")[0].endswith(num)
+        if num not in imgs or (base and not imgs[num][1]):
+            imgs[num] = (url, base)
+    return {n: u for n, (u, _) in imgs.items()}
+
+
 def main():
     packs = get(f"{PUNK}/packs.json")
     by_id = get(f"{PUNK}/index/cards_by_id.json")
@@ -62,6 +76,7 @@ def main():
 
     rows = cn_rows()
     print(f"CN print rows: {len(rows)}", flush=True)
+    cn_imgs = pick_cn_images(rows)
     best = {}                       # number -> lowest id (earliest entry)
     for r in rows:
         num = r["cardNumber"].strip()
@@ -114,18 +129,24 @@ def main():
     # one entry per base card number; count art variants (_p1, _p2, …)
     cards, variants = {}, {}
     for cid, c in by_id.items():
-        m = re.match(r"^(.*?)(_p\d+)?$", cid)
+        # _pN = alternate art, _rN = reprint; both are versions of the base card
+        m = re.match(r"^(.*?)(_[pr]\d+)?$", cid)
         base = m.group(1)
         if m.group(2):
             variants[base] = variants.get(base, 0) + 1
             continue
         pack = packs.get(str(c.get("pack_id")), {})
         label = (pack.get("title_parts") or {}).get("label") or ""
+        # The official EN scans send Cross-Origin-Resource-Policy: same-site,
+        # so browsers refuse to embed them cross-site. optcgapi mirrors them
+        # per card number; the official CN scan is the baked fallback.
         cards[base] = {
             "i": base, "n": c.get("name") or "", "l": base,
             "s": label, "r": c.get("rarity") or "",
-            "u": (c.get("img_url") or "").split("?")[0],
+            "u": f"https://optcgapi.com/media/static/Card_Images/{base}.jpg",
         }
+        if base in cn_imgs:
+            cards[base]["c2"] = cn_imgs[base]
     for base, n in variants.items():
         if base in cards:
             cards[base]["v"] = n

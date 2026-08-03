@@ -157,8 +157,9 @@ select.chip{background:var(--panel2);color:var(--dim);border:1px solid var(--bor
       <p>The "Known 简中 prints" table comes from
       <a href='https://tcg.mik.moe' style='color:var(--accent)'>Cryst's card database</a> of every
       mainland print (set code + number + rarity), joined by Chinese card name.</p>
-      <p><b>One Piece.</b> English cards and scans from the official card list (via the
-      punk-records dump). Chinese names come from the official CN site's own card database
+      <p><b>One Piece.</b> English card list from the official site (via the punk-records dump);
+      scans from optcgapi (the official EN scans refuse cross-site embedding), falling back to the
+      official Chinese scan. Chinese names come from the official CN site's own card database
       (onepiece-cardgame.cn), joined by card number — the CN printing keeps the same numbers, only
       product codes gain a C (OP01 booster = OPC-01). Official mainland branding is 航海王卡牌对战;
       sellers mostly write 海贼王.</p>
@@ -367,8 +368,12 @@ async function loadSimple(g,game,file){       // one piece + riftbound share a s
       c.imgFall='https://cdn.piltoverarchive.com/cards/'+c.i+'.webp';
     }else{
       c.img=c.u;c.imgHi=c.u;
+      if(c.c2)c.imgFall=c.c2;              // official CN scan as fallback
     }
-    c._q=norm(c.n)+'\n'+(c.zh||'')+'\n'+norm(g.setName.get(c.s)||'')+'\n'+norm(c.i)+'\n'+norm(c.l||'');
+    let alias='';
+    if(game==='onepiece'&&c.zh)
+      alias=OP_ALIAS.filter(([o])=>c.zh.includes(o)).map(([,a])=>a).join(' ');
+    c._q=norm(c.n)+'\n'+(c.zh||'')+'\n'+(alias?alias+'\n':'')+norm(g.setName.get(c.s)||'')+'\n'+norm(c.i)+'\n'+norm(c.l||'');
   }
   g.cards=cards;
 }
@@ -426,17 +431,23 @@ function run(reset=true){
   window.__hits=hits;
 }
 
+/* Walk an image through its alternate sources; mark the tile broken at the end. */
+function imgErr(el){
+  const alts=(el.dataset.alt||'').split('|').filter(Boolean);
+  if(alts.length){el.src=alts.shift();el.dataset.alt=alts.join('|');}
+  else{const t=el.closest('.card-tile');if(t)t.classList.add('broken');}
+}
+function altChain(first,...rest){
+  return rest.filter(Boolean).filter((u,i,a)=>u!==first&&a.indexOf(u)===i).join('|');
+}
 function tile(c){
   const g=GAMES[c.game];
   const b=document.createElement('button');
   b.type='button';b.className='card-tile';
   const img=document.createElement('img');
   img.loading='lazy';img.decoding='async';img.alt=c.n;img.src=c.img;
-  if(c.imgFall)img.addEventListener('error',()=>{
-    if(!img.dataset.r){img.dataset.r='1';img.src=c.imgFall;}
-    else b.classList.add('broken');
-  });
-  else img.addEventListener('error',()=>b.classList.add('broken'));
+  img.dataset.alt=altChain(c.img,c.imgFall);
+  img.addEventListener('error',()=>imgErr(img));
   const cap=document.createElement('span');cap.className='cap';
   cap.innerHTML=`<span class='nm'>${esc(c.n)}</span>`+
     (c.zh?`<span class='zh'>${esc(c.zh)}</span>`:'')+
@@ -468,7 +479,7 @@ function openModal(c){
   $('mbox').innerHTML=`
     <button class='mclose' onclick='closeModal()' aria-label='Close'>&times;</button>
     <div><img src='${esc(c.imgHi||c.img)}' alt='${esc(c.n)}'
-      onerror="if(!this.dataset.r){this.dataset.r='1';this.src='${esc(c.img)}'}"></div>
+      data-alt='${esc(altChain(c.imgHi||c.img,c.img,c.imgFall))}' onerror='imgErr(this)'></div>
     <div>
       <div class='mtitle'>${esc(c.n)}</div>
       <div class='msub'>${esc(g.setName.get(c.s)||c.s)} · ${esc(c.l||c.i)}${c.r?' · '+esc(c.r):''}${c.a?' · art '+esc(c.a):''}</div>
