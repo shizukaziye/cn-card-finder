@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang='en'><head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>CN Card Finder</title>
+<meta name='description' content='Find the Chinese name of a Pokémon, One Piece or Riftbound card to source it from China (jihuanshe, Superbuy, Taobao).'>
+<style>
+:root{
+  --bg:#0d1017;--panel:#161a24;--panel2:#1b2030;--border:#2a3142;--text:#e7e9ee;
+  --dim:#97a0b4;--accent:#66c7ff;--high:#ffb86b;--mid:#c78cff;--low:#6ad4ff;
+  --none:#4f5666;--good:#6ee7a8;--bad:#ff7f7f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 18px 80px}
+h1{font-size:25px;margin:0 0 4px;letter-spacing:-.02em}
+.tag{color:var(--dim);font-size:13px;margin-bottom:14px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin:26px 0 10px;font-weight:700}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.good{color:var(--good)}.bad{color:var(--bad)}.accent{color:var(--accent)}
+code,.mono{font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;font-size:12px}
+.mbtn{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--dim)}
+.mbtn.active{color:#06121f;background:var(--accent)}
+.note{color:var(--dim);font-size:11px;margin-top:6px}
+details.method{margin-top:26px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px 16px}
+details.method summary{cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);font-weight:700;padding:8px 0}
+details.method p,details.method li{font-size:13px;color:var(--text)}
+/* sticky search bar */
+.bar{position:sticky;top:0;z-index:20;background:rgba(13,16,23,.97);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;backdrop-filter:blur(6px);display:flex;flex-direction:column;gap:10px}
+.bar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.search{flex:1;min-width:200px;background:var(--panel2);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:9px 12px;font-size:15px;font-family:inherit}
+.search:focus{outline:1px solid var(--accent)}
+select.chip{background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:6px;
+  padding:6px 8px;font-size:13px;font-family:inherit;max-width:230px}
+#count{color:var(--dim);font-size:12px}
+/* results grid */
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px;margin-top:14px}
+.card-tile{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:7px;cursor:pointer;
+  display:flex;flex-direction:column;gap:5px;text-align:left;color:var(--text);font-family:inherit;font-size:12px}
+.card-tile:hover{border-color:var(--accent)}
+.card-tile img{width:100%;aspect-ratio:63/88;object-fit:contain;border-radius:6px;background:var(--panel2)}
+.card-tile .cap{line-height:1.3}
+.card-tile .cap .nm{display:block;font-weight:600;font-size:12px}
+.card-tile .cap .zh{display:block;color:var(--accent);font-size:12px}
+.card-tile .cap .st{display:block;color:var(--dim);font-size:10.5px}
+.card-tile.broken img{opacity:.25}
+/* detail modal */
+#modal{position:fixed;inset:0;z-index:50;display:none;background:rgba(5,7,12,.78);overflow-y:auto;padding:26px 12px}
+#modal.open{display:block}
+.mbox{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:18px;display:grid;grid-template-columns:290px 1fr;gap:18px;position:relative}
+.mbox img{width:100%;border-radius:10px;background:var(--panel2)}
+.mclose{position:absolute;top:10px;right:12px;background:var(--panel2);color:var(--dim);border:1px solid var(--border);
+  border-radius:6px;padding:2px 10px;font-size:15px;cursor:pointer}
+.mtitle{font-size:19px;font-weight:700;margin:0 0 2px;padding-right:40px}
+.msub{color:var(--dim);font-size:12.5px;margin-bottom:10px}
+.zhbig{font-size:26px;font-weight:700;color:var(--accent);margin:4px 0 2px;line-height:1.25}
+.zhflag{font-size:11px;color:var(--dim)}
+.zhflag.warn{color:var(--high)}
+.copyrow{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.copyline{display:flex;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--border);
+  border-radius:8px;padding:7px 10px}
+.copyline .lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;min-width:86px}
+.copyline .val{flex:1;font-size:14px;word-break:break-all}
+.copyline button{background:var(--accent);color:#06121f;border:none;border-radius:6px;padding:5px 12px;
+  font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.copyline button.done{background:var(--good)}
+.linkrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.linkrow a{color:#06121f;background:var(--accent);border-radius:7px;padding:8px 14px;font-size:13px;
+  font-weight:700;text-decoration:none}
+.linkrow a.alt{background:var(--panel2);color:var(--accent);border:1px solid var(--border)}
+.gamenote{margin-top:12px;color:var(--dim);font-size:12px;line-height:1.55}
+.printbox{margin-top:12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px 12px}
+.printhead{font-size:10px;color:var(--good);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:5px}
+.printbox table{width:100%;border-collapse:collapse;font-size:12.5px}
+.printbox td{padding:3px 8px 3px 0;border-bottom:1px solid var(--border)}
+.printbox tr:last-child td{border-bottom:none}
+.loadmore{margin:16px auto 0;display:block;background:var(--panel2);color:var(--accent);border:1px solid var(--border);
+  border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.status{padding:30px 0;text-align:center;color:var(--dim)}
+@media(max-width:640px){
+  .mbox{grid-template-columns:1fr}
+  .mbox img{max-width:290px;margin:0 auto}
+  .results{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+}
+</style>
+</head><body>
+<div class='wrap'>
+  <h1>CN Card Finder</h1>
+  <div class='tag'>Pick an English card, confirm it by its picture, and get the Chinese name +
+    ready-made search strings for 集换社 (jihuanshe), Taobao and Superbuy.</div>
+
+  <div class='bar'>
+    <div class='row' id='gamerow'></div>
+    <div class='row'>
+      <input class='search' id='q' type='search' autocomplete='off' spellcheck='false'
+             placeholder='Search English or Chinese name, or card number…' aria-label='Search cards'>
+      <select class='chip' id='setFilter' aria-label='Filter by set'><option value=''>All sets</option></select>
+    </div>
+    <div id='count'></div>
+  </div>
+
+  <div id='results' class='results'></div>
+  <button class='loadmore' id='more' style='display:none'>Show more</button>
+
+  <details class='method' id='guide'>
+    <summary>How to actually buy from China (guide)</summary>
+    <div id='guidebody'>
+      <p><b>The blunt facts.</b> 集换社 (jihuanshe) is the Chinese TCGplayer: app-only, mainland-only.
+      Registering needs a +86 phone number and it ships only within China. It has no international
+      shipping and no English version (its one overseas branch is a separate Japan app). So you
+      cannot buy from it directly — you route around it one of three ways.</p>
+      <p><b>Route 1 — agent custom order (Superbuy "Expert Sourcing").</b> A shopping agent's staff
+      in China buy the item for you, receive it at their warehouse, and forward it. Superbuy's
+      Expert Sourcing takes free-form requests and charges about a 10% service fee; normal
+      Taobao/Weidian orders through an agent carry no service fee. No agent lists jihuanshe as a
+      supported site, so a jihuanshe buy is always a manual request — <b>ask their support first</b>
+      whether they will buy from the jihuanshe app before you commit to a big order. Ship many
+      singles as one consolidated parcel.</p>
+      <p><b>Route 2 — same cards on Taobao or Xianyu (usually easiest).</b> Most Chinese card
+      shops cross-list on Taobao, and used singles show up on Xianyu (闲鱼). Agents support both
+      natively — that is what the search buttons in the card view are for. Xianyu counts as a
+      used-goods platform: small extra fee, no returns. Other live agents in 2026 if you want
+      alternatives: CSSBuy, Sugargoo (~5%), CNFans, Mulebuy, KakoBuy, Hoobuy.</p>
+      <p><b>Route 3 — skip the agent.</b> Chinese export shops sell CN-language singles direct to
+      the West: Dark World Zero (Chengdu; 简中 Pokémon, CN One Piece, Riftbound; PayPal),
+      PokiPair (simplified-Chinese Pokémon specialist), TCG Mikaeru (CN One Piece), plus the big
+      mainland eBay sellers. Prices run above jihuanshe spot but there is zero friction — compare
+      the landed cost before doing agent gymnastics.</p>
+      <p><b>Searching jihuanshe well.</b> The app catalogs singles per card, like TCGplayer. For
+      One Piece, search the full card number (OP13-118 style — the number is identical across
+      languages). For Pokémon, search the Chinese card name (皮卡丘ex) — mainland sets have their
+      own codes, so English numbers mean nothing there. Riftbound lives under 符文战场. Same-number
+      cards come in several art versions (异画/SP/漫画 for One Piece, 平卡/闪卡 tiers for
+      Riftbound) at very different prices — always confirm the artwork against the picture here.</p>
+      <p><b>Costs to expect (US).</b> Service fee (0–10% by route) + domestic shipping to the
+      warehouse (a few RMB) + international line (roughly $16–25 for the first kg of flat cards) +
+      <b>US customs on everything</b>: the $800 de-minimis exemption ended in 2025, so every parcel
+      from China is now dutiable. Declare truthfully; cards themselves ship with no restrictions.</p>
+    </div>
+  </details>
+
+  <details class='method'>
+    <summary>How this works / data sources</summary>
+    <div id='methodbody'>
+      <p><b>Pokémon.</b> English index (≈20k physical cards, TCG&nbsp;Pocket excluded) from
+      TCGdex via the weekly <a href='https://github.com/shizukaziye/michi-binder' style='color:var(--accent)'>michi-binder</a>
+      bake; scans from the TCGdex / pokemontcg.io CDNs. Chinese names are <i>derived</i>: official
+      zh-Hans species names (PokeAPI) + rules for prefixes and suffixes (Mega/超级, Radiant/光辉,
+      regional forms, ex/V/VMAX/VSTAR/GX…) + a small hand-checked list of trainer staples. Amber
+      text means best-guess — confirm against the listing photo. Mainland 简中 sets are separate
+      products with their own set codes (CS…, CSV…, CBB…), so match by name and artwork, not by
+      the English set number.</p>
+      <p>The "Known 简中 prints" table comes from
+      <a href='https://tcg.mik.moe' style='color:var(--accent)'>Cryst's card database</a> of every
+      mainland print (set code + number + rarity), joined by Chinese card name.</p>
+      <p><b>One Piece.</b> English cards and scans from the official card list (via the
+      punk-records dump). Chinese names come from the official CN site's own card database
+      (onepiece-cardgame.cn), joined by card number — the CN printing keeps the same numbers, only
+      product codes gain a C (OP01 booster = OPC-01). Official mainland branding is 航海王卡牌对战;
+      sellers mostly write 海贼王.</p>
+      <p><b>Riftbound (符文战场).</b> English cards and scans from Riot's official gallery API;
+      official Chinese names from the CN site's database (playloltcg.com), joined by collector
+      number. Chinese cards print numbers with a dot (OGN·001/298).</p>
+      <p>Everything is baked JSON in this repo — the page calls no third-party API at run time
+      except the image CDNs. A GitHub Action refreshes the indexes weekly.</p>
+    </div>
+  </details>
+</div>
+
+<div id='modal' onclick='if(event.target===this)closeModal()'>
+  <div class='mbox' id='mbox'></div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>s.replace(/’/g,"'").toLowerCase();
+
+/* ================= per-game config =================
+   Each game supplies: data loader, image URLs, CN-name derivation and the
+   search strings / links shown in the detail view. Data is baked JSON in
+   /data — nothing is fetched from third parties at run time. */
+
+const GAMES={
+  pokemon:{label:'Pokémon',loaded:false,cards:[],sets:[],setName:new Map()},
+  onepiece:{label:'One Piece',loaded:false,cards:[],sets:[],setName:new Map()},
+  riftbound:{label:'Riftbound',loaded:false,cards:[],sets:[],setName:new Map()},
+};
+let G='pokemon';
+let ZH_SPECIES=null;   // pokemon species map, EN -> zh-Hans
+
+/* ---------- pokemon CN derivation ---------- */
+/* Decorations around the species name. Order matters: longest first. */
+const PK_PREFIX=[
+  ['Radiant ','光辉'],['Alolan ','阿罗拉'],['Galarian ','伽勒尔'],
+  ['Hisuian ','洗翠'],['Paldean ','帕底亚'],['Origin Forme ','起源'],
+  ['Mega ','超级'],['M ','超级'],["Team Rocket's ",'火箭队的'],
+];
+const PK_SUFFIX=[
+  [' VMAX','VMAX'],[' VSTAR','VSTAR'],[' V-UNION','V-UNION'],[' V','V'],
+  ['-EX','EX'],[' EX','EX'],[' ex','ex'],['-GX','GX'],[' GX','GX'],
+  [' BREAK','BREAK'],[' X',' X'],[' Y',' Y'],
+];
+const PK_TYPES={Grass:'草',Fire:'火',Water:'水',Lightning:'雷',Psychic:'超',
+  Fighting:'斗',Darkness:'恶',Metal:'钢',Fairy:'妖',Dragon:'龙',Colorless:'无色'};
+
+function pkSpecies(name){          // exact lookup with apostrophe normalisation
+  if(!ZH_SPECIES)return null;
+  if(ZH_SPECIES[name]!==undefined)return ZH_SPECIES[name];
+  const alt=Object.prototype.hasOwnProperty.call(PK_APOS,name)?PK_APOS[name]:null;
+  return alt!==null?ZH_SPECIES[alt]??null:null;
+}
+let PK_APOS={};                    // "Farfetch'd"(ascii) -> curly key, built at load
+
+function pokemonCN(card){
+  const en=card.n.replace(/’/g,"'");
+  // energies: "Basic Fire Energy" / "Fire Energy"
+  let m=en.match(/^(Basic )?(Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy|Dragon|Colorless) Energy$/);
+  if(m)return {zh:(m[1]?'基本':'')+PK_TYPES[m[2]]+'能量',sure:true,kind:'energy'};
+  if(PK_TRAINERS[en])return {zh:PK_TRAINERS[en],sure:true,kind:'trainer'};
+
+  // tag team: translate each side
+  if(en.includes(' & ')){
+    const gx=en.endsWith('-GX');
+    const parts=en.replace(/-GX$/,'').split(' & ').map(p=>pkSpecies(p.trim()));
+    if(parts.every(p=>p))return {zh:parts.join('&')+(gx?'GX':''),sure:true,kind:'pokemon'};
+  }
+
+  let rest=en,pre='',suf='',guessy=false;
+  for(const [e,z] of PK_PREFIX)if(rest.startsWith(e)){pre+=z;rest=rest.slice(e.length);}
+  for(const [e,z] of PK_SUFFIX)if(rest.endsWith(e)){suf=z+suf;rest=rest.slice(0,rest.length-e.length);break;}
+  // second pass: "Mega Charizard X ex" keeps ' X' after the ex strip -> "…X ex"
+  for(const [e] of PK_SUFFIX)if(rest.endsWith(e)&&(e===' X'||e===' Y')){
+    suf=e.trim()+(suf?' '+suf:'');rest=rest.slice(0,rest.length-e.length);break;}
+  const sp=pkSpecies(rest.trim());
+  if(sp)return {zh:pre+sp+suf,sure:!guessy,kind:'pokemon'};
+
+  // last resort: longest species whose EN name starts the string
+  const lower=norm(en);
+  let best=null;
+  for(const k of PK_KEYS){if(lower.startsWith(k.q)&&(!best||k.q.length>best.q.length))best=k;}
+  if(best)return {zh:best.zh,sure:false,kind:'partial'};
+  return null;
+}
+let PK_KEYS=[];                    // [{q: normalised EN, zh}] for prefix fallback
+
+/* Trainer / item staples with official simplified-Chinese names.
+   Filled from data/pokemon_zh_trainers.json when present. */
+let PK_TRAINERS={};
+/* Every mainland (简中) print, keyed by Chinese card name; from Cryst's DB. */
+let PK_PRINTS={},PK_CN_SETS={};
+
+/* ---------- strings + links per game ---------- */
+function taobaoURL(kw){return 'https://s.taobao.com/search?q='+encodeURIComponent(kw);}
+function superbuyURL(kw){return 'https://www.superbuy.com/en/page/search/?keyword='+encodeURIComponent(kw)+'&type=taobao';}
+
+function pokemonStrings(card){
+  const cn=card.cnInfo&&card.cnInfo.zh;
+  const name=cn||card.n;
+  const prints=(cn&&PK_PRINTS[cn])||null;
+  let extra='';
+  if(prints){
+    const rows=prints.slice(0,12).map(([s,ix,r])=>{
+      const meta=PK_CN_SETS[s]||{};
+      return `<tr><td class='mono'>${esc(s)} ${esc(ix)}</td><td>${esc(r)}</td>`+
+             `<td style='color:var(--dim)'>${esc(meta.n||'')}</td></tr>`;
+    }).join('');
+    extra=`<div class='printbox'><div class='printhead'>Known 简中 prints (${prints.length})</div>`+
+      `<table>${rows}</table>${prints.length>12?`<div class='note'>…and ${prints.length-12} more</div>`:''}</div>`;
+  }
+  return {
+    zh:cn||null,sure:card.cnInfo?card.cnInfo.sure:false,extra,
+    lines:[
+      {lbl:'jihuanshe app',val:name},
+      {lbl:'Taobao / agent',val:'宝可梦卡牌 简中 '+name},
+    ],
+    note:(prints?'This card exists in simplified Chinese — the prints above are the mainland '+
+        'set codes and numbers sellers list under. ':
+      cn?'No mainland print found under this exact name — it may never have been released in '+
+        '简中, or the name differs; search and confirm by artwork. ':'')+
+      'Mainland 简中 sets are their own products (CS…/CSV…/CBB codes) that reprint international '+
+      'cards, so the English set number never matches the Chinese print. Match by name + artwork.',
+  };
+}
+/* Colloquial names sellers use that differ from the official 航海王 localization. */
+const OP_ALIAS=[['佐罗','索隆'],['奈美','娜美'],['山智','山治 香吉士'],
+  ['米霍克','鹰眼'],['波特夹斯','艾斯'],['特拉法尔加','罗']];
+function onepieceStrings(card){
+  const cn=card.zh;
+  const alias=cn?OP_ALIAS.filter(([o])=>cn.includes(o)).map(([,a])=>a).join(' '):'';
+  const lines=[
+    {lbl:'jihuanshe app',val:card.i},
+    {lbl:'Taobao / agent',val:'海贼王卡牌 简中 '+(cn?cn+' ':'')+card.i},
+  ];
+  if(alias)lines.push({lbl:'Colloquial name',val:alias});
+  return {
+    zh:cn||null,sure:!!cn,lines,
+    note:'The Chinese print keeps the same card numbers as English — OP01-001 is the same card in '+
+      'every language — and jihuanshe indexes One Piece singles by full number, so search the bare '+
+      'number there. Listings mix 海贼王 (colloquial) and 航海王 (official) plus OPCG; official CN '+
+      'character names differ from fan names (官方 佐罗 = colloquial 索隆).'+
+      (card.v?` This card has ${card.v} alternate-art version${card.v>1?'s':''} — match the artwork.`:''),
+  };
+}
+function riftboundStrings(card){
+  const cn=card.zh;
+  const cnNo=card.i.replace('-','·');
+  return {
+    zh:cn||null,sure:!!cn,
+    lines:[
+      {lbl:'jihuanshe app',val:cn||card.n},
+      {lbl:'Taobao / agent',val:'符文战场 '+(cn?cn+' ':'')+cnNo},
+      {lbl:'Card number',val:cnNo},
+    ],
+    note:'Riftbound is 符文战场 in China (it launched there first, and it is one of the biggest '+
+      'games on jihuanshe). Chinese and English printings share set codes and collector numbers; '+
+      'Chinese cards print the number with a dot ('+cnNo+'). Official Chinese card names are not '+
+      'literal translations, so use the name shown here, not a machine translation.',
+  };
+}
+const STRINGS={pokemon:pokemonStrings,onepiece:onepieceStrings,riftbound:riftboundStrings};
+
+/* ---------- data loading ---------- */
+async function j(url){const r=await fetch(url);if(!r.ok)throw new Error(url+' -> '+r.status);return r.json();}
+
+async function loadPokemon(g){
+  const [cards,sets,species,trainers,prints,cnSets]=await Promise.all([
+    j('data/pokemon_cards.json'),j('data/pokemon_sets.json'),
+    j('data/pokemon_zh_species.json'),
+    j('data/pokemon_zh_trainers.json').catch(()=>({})),
+    j('data/pokemon_cn_prints.json').catch(()=>({})),
+    j('data/pokemon_cn_sets.json').catch(()=>({})),
+  ]);
+  ZH_SPECIES=species;PK_TRAINERS=trainers;PK_PRINTS=prints;PK_CN_SETS=cnSets;
+  PK_APOS={};PK_KEYS=[];
+  for(const k of Object.keys(species)){
+    if(k.includes('’'))PK_APOS[k.replace(/’/g,"'")]=k;
+    PK_KEYS.push({q:norm(k),zh:species[k]});
+  }
+  g.sets=sets;
+  for(const s of sets)g.setName.set(s.i,s.n);
+  for(const c of cards){
+    c.game='pokemon';
+    c.img=c.p==='p'?c.u+'.png':c.u+'/low.webp';
+    c.imgHi=c.p==='p'?c.u+'_hires.png':c.u+'/high.webp';
+    c.imgFall=c.p==='p'?c.u+'.png':c.u+'/low.png';
+    c.cnInfo=pokemonCN(c);
+    c.zh=c.cnInfo?c.cnInfo.zh:'';
+    c._q=norm(c.n)+'\n'+(c.zh||'')+'\n'+norm(g.setName.get(c.s)||'')+'\n'+norm(c.i);
+  }
+  g.cards=cards;
+}
+async function loadSimple(g,game,file){       // one piece + riftbound share a shape
+  const [cards,sets]=await Promise.all([j('data/'+file+'_cards.json'),j('data/'+file+'_sets.json')]);
+  g.sets=sets;
+  for(const s of sets)g.setName.set(s.i,s.n);
+  for(const c of cards){
+    c.game=game;
+    if(game==='riftbound'){
+      c.img=c.u+'&w=250&auto=format';      // Sanity CDN resizes on the fly
+      c.imgHi=c.u;
+      c.imgFall='https://cdn.piltoverarchive.com/cards/'+c.i+'.webp';
+    }else{
+      c.img=c.u;c.imgHi=c.u;
+    }
+    c._q=norm(c.n)+'\n'+(c.zh||'')+'\n'+norm(g.setName.get(c.s)||'')+'\n'+norm(c.i)+'\n'+norm(c.l||'');
+  }
+  g.cards=cards;
+}
+const LOADERS={
+  pokemon:g=>loadPokemon(g),
+  onepiece:g=>loadSimple(g,'onepiece','onepiece'),
+  riftbound:g=>loadSimple(g,'riftbound','riftbound'),
+};
+
+async function ensureLoaded(key){
+  const g=GAMES[key];
+  if(g.loaded)return;
+  $('results').innerHTML='';$('count').textContent='';
+  showStatus('Loading '+g.label+' cards…');
+  try{await LOADERS[key](g);g.loaded=true;}
+  catch(e){showStatus('Could not load '+g.label+' data ('+esc(e.message)+').');throw e;}
+  clearStatus();
+}
+function showStatus(t){let el=$('status');if(!el){el=document.createElement('div');el.id='status';el.className='status';$('results').before(el);}el.textContent=t;}
+function clearStatus(){const el=$('status');if(el)el.remove();}
+
+/* ---------- search ---------- */
+function score(card,q){
+  const n=norm(card.n);
+  if(n===q)return 0;
+  if(card.zh&&card.zh===q)return 0;
+  const at=n.indexOf(q);
+  if(at===0)return 1;
+  if(card.zh&&card.zh.indexOf(q)===0)return 1;
+  if(card._q.includes(q))return 2;
+  return -1;
+}
+let shown=0;const PAGE=120;
+function run(reset=true){
+  const g=GAMES[G];
+  if(!g.loaded)return;
+  const q=norm(($('q').value||'').trim());
+  const setId=$('setFilter').value;
+  const hits=[];
+  for(const c of g.cards){
+    if(setId&&c.s!==setId)continue;
+    let rank=0;
+    if(q){rank=score(c,q);if(rank<0)continue;}
+    hits.push({c,rank});
+  }
+  hits.sort((a,b)=>a.rank-b.rank||a.c.n.length-b.c.n.length||a.c.n.localeCompare(b.c.n)||a.c.i.localeCompare(b.c.i));
+  if(reset)shown=PAGE;
+  const slice=hits.slice(0,shown);
+  $('count').textContent=hits.length?hits.length.toLocaleString()+' cards'+(hits.length>slice.length?' — showing '+slice.length:''):
+    'No cards match. Try a shorter search or clear the set filter.';
+  const frag=document.createDocumentFragment();
+  for(const {c} of slice)frag.append(tile(c));
+  $('results').replaceChildren(frag);
+  $('more').style.display=hits.length>slice.length?'block':'none';
+  window.__hits=hits;
+}
+
+function tile(c){
+  const g=GAMES[c.game];
+  const b=document.createElement('button');
+  b.type='button';b.className='card-tile';
+  const img=document.createElement('img');
+  img.loading='lazy';img.decoding='async';img.alt=c.n;img.src=c.img;
+  if(c.imgFall)img.addEventListener('error',()=>{
+    if(!img.dataset.r){img.dataset.r='1';img.src=c.imgFall;}
+    else b.classList.add('broken');
+  });
+  else img.addEventListener('error',()=>b.classList.add('broken'));
+  const cap=document.createElement('span');cap.className='cap';
+  cap.innerHTML=`<span class='nm'>${esc(c.n)}</span>`+
+    (c.zh?`<span class='zh'>${esc(c.zh)}</span>`:'')+
+    `<span class='st'>${esc(g.setName.get(c.s)||c.s)} · ${esc(c.l||c.i)}${c.r?' · '+esc(c.r):''}</span>`;
+  b.append(img,cap);
+  b.addEventListener('click',()=>openModal(c));
+  return b;
+}
+
+/* ---------- detail modal ---------- */
+function copyBtn(val,i){
+  return `<button onclick='copyVal(this,${i})'>Copy</button>`;
+}
+let modalLines=[];
+function copyVal(btn,i){
+  navigator.clipboard.writeText(modalLines[i]).then(()=>{
+    btn.textContent='Copied';btn.classList.add('done');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('done');},1200);
+  });
+}
+function openModal(c){
+  const g=GAMES[c.game];
+  const s=STRINGS[c.game](c);
+  modalLines=s.lines.map(l=>l.val);
+  const kwMain=s.lines.length>1?s.lines[1].val:s.lines[0].val;
+  const zhBlock=s.zh
+    ?`<div class='zhbig'>${esc(s.zh)}</div><div class='zhflag ${s.sure?'':'warn'}'>${s.sure?'Chinese name':'Best-guess Chinese name — confirm against the listing photo'}</div>`
+    :`<div class='zhbig' style='color:var(--high);font-size:16px'>No Chinese name on file</div><div class='zhflag warn'>Search with the English name or card number — Chinese listings usually include both.</div>`;
+  $('mbox').innerHTML=`
+    <button class='mclose' onclick='closeModal()' aria-label='Close'>&times;</button>
+    <div><img src='${esc(c.imgHi||c.img)}' alt='${esc(c.n)}'
+      onerror="if(!this.dataset.r){this.dataset.r='1';this.src='${esc(c.img)}'}"></div>
+    <div>
+      <div class='mtitle'>${esc(c.n)}</div>
+      <div class='msub'>${esc(g.setName.get(c.s)||c.s)} · ${esc(c.l||c.i)}${c.r?' · '+esc(c.r):''}${c.a?' · art '+esc(c.a):''}</div>
+      ${zhBlock}
+      <div class='copyrow'>
+        ${s.lines.map((l,i)=>`<div class='copyline'><span class='lbl'>${esc(l.lbl)}</span><span class='val'>${esc(l.val)}</span>${copyBtn(l.val,i)}</div>`).join('')}
+      </div>
+      ${s.extra||''}
+      <div class='linkrow'>
+        <a href='${esc(superbuyURL(kwMain))}' target='_blank' rel='noopener'>Search on Superbuy</a>
+        <a class='alt' href='${esc(taobaoURL(kwMain))}' target='_blank' rel='noopener'>Taobao</a>
+      </div>
+      <div class='gamenote'>${s.note}</div>
+    </div>`;
+  $('modal').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){$('modal').classList.remove('open');document.body.style.overflow='';}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+/* ---------- game switching + wiring ---------- */
+function fillSets(){
+  const g=GAMES[G];
+  const sel=$('setFilter');
+  sel.innerHTML="<option value=''>All sets</option>";
+  for(const s of [...g.sets].reverse()){
+    const o=document.createElement('option');o.value=s.i;o.textContent=s.n;sel.append(o);
+  }
+}
+async function setGame(key){
+  G=key;
+  document.querySelectorAll('#gamerow .mbtn').forEach(b=>b.classList.toggle('active',b.dataset.g===key));
+  $('setFilter').value='';
+  try{await ensureLoaded(key);}catch(e){return;}
+  fillSets();run();
+}
+function buildGameRow(){
+  $('gamerow').innerHTML=Object.entries(GAMES).map(([k,g])=>
+    `<button class='mbtn${k===G?' active':''}' data-g='${k}' onclick='setGame("${k}")'>${g.label}</button>`).join('');
+}
+let timer;
+$('q').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>run(),140);});
+$('setFilter').addEventListener('change',()=>run());
+$('more').addEventListener('click',()=>{shown+=PAGE;run(false);});
+
+window.onload=async function(){
+  buildGameRow();
+  await setGame('pokemon');
+};
+</script>
+<script src="https://www.loseii.com/nav.js" defer></script>
+<script src="https://www.loseii.com/social-bar.js" defer></script>
+</body></html>

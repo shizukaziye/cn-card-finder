@@ -1,0 +1,42 @@
+name: refresh-data
+
+# Tuesdays, the day after michi-binder rebuilds its Pokemon index.
+on:
+  schedule:
+    - cron: "0 9 * * 2"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Each bake stands alone: a broken source skips that game, the rest
+      # still refresh. Every script refuses to write a suspiciously small
+      # index, so a partial failure cannot wipe good data.
+      - name: Pokemon EN index (from michi-binder)
+        run: python3 scripts/build_pokemon.py || echo "::warning::pokemon EN bake failed"
+      - name: Pokemon zh species map
+        run: python3 scripts/build_pokemon_zh.py || echo "::warning::species map bake failed"
+      - name: Pokemon mainland prints (Cryst DB)
+        run: python3 scripts/build_pokemon_cn.py || echo "::warning::mainland prints bake failed"
+      - name: One Piece (punk-records + official CN API)
+        run: python3 scripts/build_onepiece.py || echo "::warning::one piece bake failed"
+      - name: Riftbound (Riot gallery + official CN API)
+        run: python3 scripts/build_riftbound.py || echo "::warning::riftbound bake failed"
+
+      - name: Commit changes
+        run: |
+          git config user.name "Shizukaziye"
+          git config user.email "lxpi94@gmail.com"
+          git add data/
+          git diff --cached --quiet && echo "no changes" && exit 0
+          git commit -m "data: weekly refresh"
+          git push
