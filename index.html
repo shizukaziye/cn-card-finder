@@ -27,7 +27,7 @@ details.method{margin-top:26px;background:var(--panel);border:1px solid var(--bo
 details.method summary{cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);font-weight:700;padding:8px 0}
 details.method p,details.method li{font-size:13px;color:var(--text)}
 /* sticky search bar */
-.bar{position:sticky;top:0;z-index:20;background:rgba(13,16,23,.97);border:1px solid var(--border);
+.bar{position:sticky;top:var(--site-nav-offset,0px);z-index:20;background:rgba(13,16,23,.97);border:1px solid var(--border);
   border-radius:10px;padding:12px 14px;backdrop-filter:blur(6px);display:flex;flex-direction:column;gap:10px}
 .bar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .search{flex:1;min-width:200px;background:var(--panel2);color:var(--text);border:1px solid var(--border);
@@ -530,6 +530,6 @@ window.onload=async function(){
   await setGame('pokemon');
 };
 </script>
-<script src="https://www.loseii.com/nav.js" defer></script>
-<script src="https://www.loseii.com/social-bar.js" defer></script>
+<script src="https://shizukaziye.github.io/shizutcg/nav.js" defer></script>
+<script src="https://shizukaziye.github.io/shizutcg/social-bar.js" defer></script>
 </body></html>
