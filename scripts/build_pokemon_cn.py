@@ -44,16 +44,27 @@ def main():
     for s in post("product-list", {})["list"]:
         sets[s["setCode"]] = {"n": s["name"], "d": (s.get("releaseDate") or "")[:10]}
 
-    rows, page = [], 1
-    while True:
-        d = post("card-advance-search", {"Page": page, "PageSize": 100})
-        rows.extend(d["list"])
-        if page >= d["pageNum"]:
-            break
-        page += 1
-        if page % 20 == 0:
-            print(f"  page {page}/{d['pageNum']}")
-        time.sleep(DELAY)
+    # Since 2026-08 the search refuses an empty query ("need 1 or more search
+    # criteria"), so walk every series the site lists and merge the pages.
+    # A print that shows up under two series is kept once.
+    series = post("card-advance-search-params", {})["series"]
+    rows, seen = [], set()
+    for s in series:
+        page = 1
+        while True:
+            d = post("card-advance-search", {"Page": page, "PageSize": 100, "series": [s]})
+            for r in d["list"]:
+                key = (r["setCode"], r["cardIndex"])
+                if key not in seen:
+                    seen.add(key)
+                    rows.append(r)
+            if page >= d["pageNum"]:
+                break
+            page += 1
+            if page % 20 == 0:
+                print(f"  {s}: page {page}/{d['pageNum']}")
+            time.sleep(DELAY)
+        print(f"  {s}: {len(rows)} prints so far")
 
     if len(rows) < 10000:
         raise SystemExit(f"only {len(rows)} print rows; refusing to write")

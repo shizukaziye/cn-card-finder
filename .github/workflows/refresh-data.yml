@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install dependencies
+        run: pip install requests
 
       # Each bake stands alone: a broken source skips that game, the rest
       # still refresh. Every script refuses to write a suspiciously small
