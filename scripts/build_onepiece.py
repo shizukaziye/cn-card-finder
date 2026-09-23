@@ -4,10 +4,17 @@
 English side: punk-records (github.com/buhbbl/punk-records), the vegapull dump
 of the official EN card list, with hotlinkable official card scans.
 
-Chinese side: the official CN site's own API (webadmin.windoent.com/op-public).
-Card numbers are identical across languages, so weblist gives every CN print
-row and webInfo/{id} the official Chinese card name. Names are cached in
+Chinese side: the official CN site's own API. Since August 2026 it lives under
+webadmin.windoent.com/front/op-public (the old /op-public path answers 403);
+the site's axios client sends no token or special headers. Card numbers are
+identical across languages, so weblist gives every CN print row and
+webInfo/{id} the official Chinese card name. Names are cached in
 data/onepiece_zh.json so a rebuild only fetches numbers it has not seen.
+
+CN print rows mark alternate arts with a suffix on the card number: letters
+(EB01-001P, EB01-006SP, OP01-016P-R) on older sets, _NN or -NN (OP17-001_02,
+OP06-050-03) since OPC-12. base_number() folds all of them onto the base
+number, which is what punk-records uses.
 
 Writes data/onepiece_cards.json, data/onepiece_sets.json, data/onepiece_zh.json.
 Be polite: the CN API is the production backend of the official site.
@@ -24,7 +31,7 @@ from pathlib import Path
 import requests
 
 PUNK = "https://raw.githubusercontent.com/buhbbl/punk-records/main/english"
-CN = "https://webadmin.windoent.com/op-public"
+CN = "https://webadmin.windoent.com/front/op-public"
 OUT = Path(__file__).resolve().parent.parent / "data"
 UA = "cn-card-finder bake (+https://github.com/shizukaziye/cn-card-finder)"
 DELAY = 0.35
@@ -42,10 +49,26 @@ def get(url, tries=4):
             time.sleep(2 ** attempt)
 
 
+BASE_NUM = re.compile(r"^([A-Z]+\d*-\d{3})")
+
+
+def base_number(raw):
+    """CN card number -> (base number, is_alt). ('', False) if unparseable."""
+    raw = (raw or "").strip()
+    m = BASE_NUM.match(raw)
+    if not m:
+        return "", False
+    return m.group(1), raw != m.group(1)
+
+
 def cn_rows():
+    """Every CN print row: {id, cardNumber, cardImg, cardOfferType}."""
     page, rows = 1, []
     while True:
-        d = get(f"{CN}/cardList/cardlist/weblist?page={page}&limit=500")["page"]
+        d = get(f"{CN}/cardList/cardlist/weblist?page={page}&limit=500")
+        if d.get("code") != 0 or "page" not in d:
+            raise RuntimeError(f"weblist page {page}: {str(d)[:200]}")
+        d = d["page"]
         rows.extend(d["list"])
         if page >= d["totalPage"]:
             return rows
@@ -54,16 +77,24 @@ def cn_rows():
 
 
 def pick_cn_images(rows):
-    """number -> official CN scan URL, preferring the base art (no _NN suffix)."""
+    """base number -> official CN scan URL, preferring the base art.
+
+    A row shows the base art when its number has no variant suffix and its
+    scan is not an _NN alt. Scans up to OP-16 are named <ms timestamp><number>
+    (the number part can carry _NN even when the row's number does not);
+    newer ones are UUIDs, so there the row's number decides. Among equals the
+    lowest id (the earliest print) wins, which keeps rebakes stable.
+    """
     imgs = {}
     for r in rows:
-        num = r["cardNumber"].strip()
+        num, alt = base_number(r.get("cardNumber"))
         url = (r.get("cardImg") or "").strip()
-        if not num or num.endswith("P") or not url:
+        if not num or not url:
             continue
-        base = url.rsplit("/", 1)[-1].split(".")[0].endswith(num)
-        if num not in imgs or (base and not imgs[num][1]):
-            imgs[num] = (url, base)
+        stem = url.rsplit("/", 1)[-1].split(".")[0]
+        rank = (alt or bool(re.search(r"_\d+$", stem)), r["id"])
+        if num not in imgs or rank < imgs[num][1]:
+            imgs[num] = (url, rank)
     return {n: u for n, (u, _) in imgs.items()}
 
 
@@ -77,14 +108,15 @@ def main():
     rows = cn_rows()
     print(f"CN print rows: {len(rows)}", flush=True)
     cn_imgs = pick_cn_images(rows)
-    best = {}                       # number -> lowest id (earliest entry)
+    # base number -> id of the row to read its name from: the earliest plain
+    # print, else the earliest alt art (same name). Some cards, such as most
+    # of EB-04, only exist in CN as alt arts so far.
+    rank = {}
     for r in rows:
-        num = r["cardNumber"].strip()
-        # P-suffixed rows are alt arts of the base number with the same name.
-        if not num or num.endswith("P"):
-            continue
-        if num not in best or r["id"] < best[num]:
-            best[num] = r["id"]
+        num, alt = base_number(r.get("cardNumber"))
+        if num and (num not in rank or (alt, r["id"]) < rank[num]):
+            rank[num] = (alt, r["id"])
+    best = {n: rid for n, (_, rid) in rank.items()}
 
     todo = sorted(n for n in best if n not in zh)
     print(f"unique CN numbers: {len(best)}, new to fetch: {len(todo)}", flush=True)

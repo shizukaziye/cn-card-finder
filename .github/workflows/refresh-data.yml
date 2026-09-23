@@ -21,18 +21,30 @@ jobs:
         run: pip install requests
 
       # Each bake stands alone: a broken source skips that game, the rest
-      # still refresh. Every script refuses to write a suspiciously small
-      # index, so a partial failure cannot wipe good data.
+      # still refresh and get committed. Every script refuses to write a
+      # suspiciously small index, so a partial failure cannot wipe good data.
+      # The last step then fails the run if any bake failed, so a dead
+      # source shows up red instead of hiding behind a warning.
       - name: Pokemon EN index (from michi-binder)
-        run: python3 scripts/build_pokemon.py || echo "::warning::pokemon EN bake failed"
+        id: pokemon_en
+        continue-on-error: true
+        run: python3 scripts/build_pokemon.py
       - name: Pokemon zh species map
-        run: python3 scripts/build_pokemon_zh.py || echo "::warning::species map bake failed"
+        id: pokemon_zh
+        continue-on-error: true
+        run: python3 scripts/build_pokemon_zh.py
       - name: Pokemon mainland prints (Cryst DB)
-        run: python3 scripts/build_pokemon_cn.py || echo "::warning::mainland prints bake failed"
+        id: pokemon_cn
+        continue-on-error: true
+        run: python3 scripts/build_pokemon_cn.py
       - name: One Piece (punk-records + official CN API)
-        run: python3 scripts/build_onepiece.py || echo "::warning::one piece bake failed"
+        id: onepiece
+        continue-on-error: true
+        run: python3 scripts/build_onepiece.py
       - name: Riftbound (Riot gallery + official CN API)
-        run: python3 scripts/build_riftbound.py || echo "::warning::riftbound bake failed"
+        id: riftbound
+        continue-on-error: true
+        run: python3 scripts/build_riftbound.py
 
       - name: Commit changes
         run: |
@@ -42,3 +54,23 @@ jobs:
           git diff --cached --quiet && echo "no changes" && exit 0
           git commit -m "data: weekly refresh"
           git push
+
+      - name: Fail if any bake failed
+        if: always()
+        env:
+          OUTCOMES: >-
+            pokemon_en=${{ steps.pokemon_en.outcome }}
+            pokemon_zh=${{ steps.pokemon_zh.outcome }}
+            pokemon_cn=${{ steps.pokemon_cn.outcome }}
+            onepiece=${{ steps.onepiece.outcome }}
+            riftbound=${{ steps.riftbound.outcome }}
+        run: |
+          failed=""
+          for kv in $OUTCOMES; do
+            [ "${kv#*=}" = success ] || failed="$failed ${kv%%=*}(${kv#*=})"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::bake failed:$failed"
+            exit 1
+          fi
+          echo "all bakes succeeded"
